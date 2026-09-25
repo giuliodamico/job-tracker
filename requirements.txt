@@ -1,0 +1,7 @@
+streamlit>=1.64,<2
+SQLAlchemy>=2.1,<3
+pandas>=3.0,<4
+plotly>=7.1,<8
+python-dotenv>=1.2,<2
+# Driver Postgres (default di SQLAlchemy 2.1 per gli URL postgresql://): serve solo con Supabase
+psycopg[binary]>=3.3,<4

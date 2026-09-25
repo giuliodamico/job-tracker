@@ -1,0 +1,26 @@
+# Segreti
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+
+# Database con le candidature reali, in qualunque cartella (anche app/data/),
+# compresi i file temporanei di SQLite (-journal, -wal, -shm)
+*.db
+*.db-*
+*.sqlite3
+
+# Profilo personale (CV, preferenze): in git resta solo il template
+profile/*
+!profile/cv_profile.example.md
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Editor e sistema operativo
+.DS_Store
+.vscode/
+.idea/
