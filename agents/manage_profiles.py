@@ -13,6 +13,8 @@ from pathlib import Path
 if __package__ in (None, ""):  # avviato come file (python agents/manage_profiles.py)
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from sqlalchemy.exc import OperationalError  # noqa: E402
+
 from app import db  # noqa: E402
 
 
@@ -31,7 +33,12 @@ def main(argv: list[str] | None = None) -> int:
     deactivate.add_argument("id", type=int)
 
     args = parser.parse_args(argv)
-    db.init_db()
+    try:
+        db.init_db()
+    except OperationalError as exc:
+        # La prima riga dell'errore del driver basta a capire il problema (psycopg non mostra la password).
+        print(f"Database non raggiungibile: {str(exc.orig or exc).splitlines()[0]}", file=sys.stderr)
+        return 1
 
     if args.command == "add":
         profile_id = db.add_search_profile(

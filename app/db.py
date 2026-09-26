@@ -24,7 +24,9 @@ STATUSES = ("Applied", "Interview", "Offer", "Rejected")
 LISTING_STATUSES = ("New", "Approved", "Discarded", "Draft pronto", "Applied")
 
 # pool_pre_ping scarta le connessioni chiuse lato server (Supabase chiude quelle inattive).
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+# Su Postgres, se la rete blocca la porta, meglio un errore dopo 10 secondi che un'attesa infinita.
+connect_args = {"connect_timeout": 10} if DATABASE_URL.startswith("postgresql") else {}
+engine = create_engine(DATABASE_URL, pool_pre_ping=True, connect_args=connect_args)
 
 
 class Base(DeclarativeBase):

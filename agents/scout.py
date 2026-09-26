@@ -18,6 +18,7 @@ if __package__ in (None, ""):  # avviato come file (python agents/scout.py)
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import anthropic  # noqa: E402
+from sqlalchemy.exc import OperationalError  # noqa: E402
 
 from agents import notifier, scorer  # noqa: E402
 from agents.sources import JobPosting, SourceError, adzuna, greenhouse, lever, load_companies  # noqa: E402
@@ -25,8 +26,14 @@ from app import db  # noqa: E402
 
 SOURCES = (adzuna, greenhouse, lever)
 SCORING_WORKERS = 4
-# Errori di configurazione (chiave, permessi, modello): inutile provare con le altre offerte.
-FATAL_API_ERRORS = (anthropic.AuthenticationError, anthropic.PermissionDeniedError, anthropic.NotFoundError)
+# Errori di configurazione o dell'account (chiave, permessi, modello, credito esaurito: il credito
+# esaurito arriva come 400): inutile provare con le altre offerte.
+FATAL_API_ERRORS = (
+    anthropic.AuthenticationError,
+    anthropic.PermissionDeniedError,
+    anthropic.NotFoundError,
+    anthropic.BadRequestError,
+)
 
 log = logging.getLogger("scout")
 
@@ -37,7 +44,11 @@ def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(name)s: %(message)s")
     logging.getLogger("httpx2").setLevel(logging.WARNING)  # l'SDK Anthropic logga ogni richiesta
-    db.init_db()
+    try:
+        db.init_db()
+    except OperationalError as exc:
+        log.error("Database non raggiungibile: %s", str(exc.orig or exc).splitlines()[0])
+        return 1
 
     telegram = notifier.is_configured()
     if telegram:
