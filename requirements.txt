@@ -5,3 +5,7 @@ plotly>=7.1,<8
 python-dotenv>=1.2,<2
 # Driver Postgres (default di SQLAlchemy 2.1 per gli URL postgresql://): serve solo con Supabase
 psycopg[binary]>=3.3,<4
+# Agente di scouting: API Claude, chiamate HTTP alle fonti e a Telegram, lista aziende in YAML
+anthropic>=1.8,<2
+requests>=2.32,<3
+PyYAML>=6.0,<7

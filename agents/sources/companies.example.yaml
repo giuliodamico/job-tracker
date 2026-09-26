@@ -1,0 +1,28 @@
+# Aziende da controllare sulle job board pubbliche di Greenhouse e Lever (nessuna chiave richiesta).
+#
+# Questo è l'esempio versionato: l'agente legge companies.yaml nella stessa cartella,
+# escluso da git perché rivela quali aziende stai monitorando.
+#   cp agents/sources/companies.example.yaml agents/sources/companies.yaml
+#
+# Il token è l'ultima parte dell'indirizzo della job board dell'azienda:
+#   Greenhouse: https://job-boards.greenhouse.io/<token>  (o boards.greenhouse.io/<token>)
+#   Lever:      https://jobs.lever.co/<token>
+# Per controllare un token, apri nel browser:
+#   https://boards-api.greenhouse.io/v1/boards/<token>/jobs
+#   https://api.lever.co/v0/postings/<token>?mode=json
+
+greenhouse:
+  - name: SumUp
+    token: sumup
+  - name: Deliveroo
+    token: deliveroo
+  - name: Doctolib
+    token: doctolib
+  - name: Databricks
+    token: databricks
+
+lever:
+  - name: Qonto
+    token: qonto
+  - name: Docebo
+    token: docebo

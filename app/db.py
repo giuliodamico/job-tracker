@@ -1,4 +1,4 @@
-"""Accesso al database: modello `applications` e operazioni di lettura/scrittura.
+"""Accesso al database: tabelle `applications`, `search_profiles`, `listings` e operazioni.
 
 Il modulo non dipende da Streamlit, così lo possono importare anche gli agenti
 (`from app import db`). Il backend si sceglie con DATABASE_URL: se non è impostata
@@ -19,6 +19,9 @@ load_dotenv(ROOT_DIR / ".env")
 
 DATABASE_URL = os.getenv("DATABASE_URL") or f"sqlite:///{ROOT_DIR / 'job_tracker.db'}"
 STATUSES = ("Applied", "Interview", "Offer", "Rejected")
+# Come il vincolo listings_status_check su Supabase. Le offerte sotto soglia finiscono in
+# "Discarded" senza passare dal report, così la deduplica non le rivaluta.
+LISTING_STATUSES = ("New", "Approved", "Discarded", "Draft pronto", "Applied")
 
 # pool_pre_ping scarta le connessioni chiuse lato server (Supabase chiude quelle inattive).
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
@@ -52,6 +55,49 @@ class Application(Base):
     def _check_status(self, _key: str, value: str) -> str:
         if value not in STATUSES:
             raise ValueError(f"Status non valido: {value!r}. Valori ammessi: {', '.join(STATUSES)}")
+        return value
+
+
+class SearchProfile(Base):
+    """Ricerca attiva dell'agente di scouting, es. "Data Scientist", Roma, junior/graduate."""
+
+    __tablename__ = "search_profiles"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    keyword: Mapped[str] = mapped_column(String(200))
+    location: Mapped[str | None] = mapped_column(String(200))
+    seniority: Mapped[str | None] = mapped_column(String(100))
+    active: Mapped[bool] = mapped_column(default=True)
+
+
+class Listing(Base):
+    """Offerta trovata dall'agente di scouting: una riga per URL, così non viene rivalutata.
+
+    Le colonne ricalcano la tabella `listings` già creata su Supabase.
+    """
+
+    __tablename__ = "listings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    company: Mapped[str] = mapped_column(Text)
+    role: Mapped[str] = mapped_column(Text)
+    location: Mapped[str | None] = mapped_column(Text)
+    salary_range: Mapped[str | None] = mapped_column(Text)
+    description: Mapped[str | None] = mapped_column(Text)
+    job_url: Mapped[str] = mapped_column(Text, unique=True)
+    source: Mapped[str] = mapped_column(Text)
+    relevance_score: Mapped[int | None]
+    relevance_reason: Mapped[str | None] = mapped_column(Text)
+    cover_letter_draft: Mapped[str | None] = mapped_column(Text)  # la scrive il drafter (Fase 4)
+    status: Mapped[str] = mapped_column(Text, default="New")
+    date_found: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    @validates("status")
+    def _check_status(self, _key: str, value: str) -> str:
+        if value not in LISTING_STATUSES:
+            raise ValueError(
+                f"Status non valido: {value!r}. Valori ammessi: {', '.join(LISTING_STATUSES)}"
+            )
         return value
 
 
@@ -96,6 +142,63 @@ def seed_if_empty() -> bool:
         session.add_all(Application(**row) for row in _sample_applications())
         session.commit()
         return True
+
+
+def get_search_profiles(active_only: bool = False) -> list[SearchProfile]:
+    """Profili di ricerca in ordine di creazione; con active_only solo quelli attivi."""
+    query = select(SearchProfile).order_by(SearchProfile.id)
+    if active_only:
+        query = query.where(SearchProfile.active.is_(True))
+    with Session(engine) as session:
+        return list(session.scalars(query))
+
+
+def add_search_profile(keyword: str, location: str | None = None, seniority: str | None = None) -> int:
+    """Aggiunge un profilo di ricerca attivo e ne restituisce l'id."""
+    with Session(engine) as session:
+        profile = SearchProfile(keyword=keyword, location=location, seniority=seniority)
+        session.add(profile)
+        session.commit()
+        return profile.id
+
+
+def deactivate_search_profile(profile_id: int) -> bool:
+    """Disattiva un profilo di ricerca. False se l'id non esiste."""
+    with Session(engine) as session:
+        profile = session.get(SearchProfile, profile_id)
+        if profile is None:
+            return False
+        profile.active = False
+        session.commit()
+        return True
+
+
+def listing_urls() -> set[str]:
+    """URL di tutte le offerte già viste dall'agente, per la deduplica."""
+    with Session(engine) as session:
+        return set(session.scalars(select(Listing.job_url)))
+
+
+def add_listing(**fields) -> Listing:
+    """Salva un'offerta (campi = colonne di Listing) e la restituisce completa di id."""
+    with Session(engine, expire_on_commit=False) as session:
+        listing = Listing(**fields)
+        session.add(listing)
+        session.commit()
+        session.refresh(listing)
+        return listing
+
+
+def set_listing_status(listing_id: int, status: str) -> Listing | None:
+    """Cambia lo status di un'offerta e la restituisce aggiornata. None se l'id non esiste."""
+    with Session(engine, expire_on_commit=False) as session:
+        listing = session.get(Listing, listing_id)
+        if listing is None:
+            return None
+        listing.status = status
+        session.commit()
+        session.refresh(listing)
+        return listing
 
 
 def _sample_applications() -> list[dict]:
